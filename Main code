@@ -12,637 +12,463 @@ Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define BTN_DOWN   4
 #define BTN_SELECT 5
 
-const char* menuItems[] = {"Game", "Timer", "Game 2" , "Home Page"};
-const int menuCount = 4;
-int selectedIndex = 0;
+#define STATE_CAT      0
+#define STATE_MENU     1
+#define STATE_DINO     2
+#define STATE_TETRIS   3
+#define STATE_FLAPPY   4
+#define STATE_SNAKE    5
+#define STATE_BREAKOUT 6
 
-bool screenOn = true;
-
-#define STATE_CAT    0
-#define STATE_MENU   1
-#define STATE_GAME   2
-#define STATE_TIMER  3
-int currentState = STATE_CAT;
+int  currentState = STATE_CAT;
+bool screenOn     = false;
+const int menuCount = 6;
+int selectedIndex   = 0;
 
 unsigned long lastDebounce = 0;
-#define DEBOUNCE_DELAY 200
-
-unsigned long lastFrameTime = 0;
-#define FRAME_DELAY 300
-int catFrame = 0;
-
-// ─── DINO GAME VARIABLES ───
-#define GROUND_Y      54
-#define DINO_X        16
-#define DINO_W        12
-#define DINO_H        14
-#define JUMP_FORCE    -9
-#define GRAVITY       1
-
-int  dinoY;
-int  dinoVY;
-bool dinoOnGround;
-bool dinoLegToggle;
-
-// Two cactus obstacles
-int  cactusX[2];
-int  cactusH[2];
-int  cactusW[2];
-
-int  gameScore;
-int  gameSpeed;
-bool gameOver;
-bool gameStarted;
-
-// ─── TIMER VARIABLES ───
-unsigned long timerStartMillis;
-unsigned long timerPausedMillis;
-int timerTotalSeconds = 120; // 2 minutes default
-int timerSecondsLeft;
-bool timerRunning;
-bool timerPaused;
-bool timerDone;
-
-unsigned long lastGameTick;
-#define GAME_TICK 40
-
-unsigned long lastLegToggle;
-#define LEG_TOGGLE_DELAY 120
+#define DEBOUNCE_MS 200
 
 bool buttonPressed(int pin) {
-  if (digitalRead(pin) == LOW) {
-    if (millis() - lastDebounce > DEBOUNCE_DELAY) {
-      lastDebounce = millis();
-      return true;
-    }
+  if (digitalRead(pin) == LOW && millis() - lastDebounce > DEBOUNCE_MS) {
+    lastDebounce = millis(); return true;
   }
   return false;
 }
+bool buttonDown(int pin) { return digitalRead(pin) == LOW; }
 
-// Raw button read for jump (no debounce delay needed mid-game)
-bool buttonDown(int pin) {
-  return digitalRead(pin) == LOW;
+void backToMenu() {
+  currentState = STATE_MENU;
+  selectedIndex = 0;
 }
 
-// ─── TETRIS VARIABLES ───
-#define BOARD_W     10
-#define BOARD_H     16
-#define BLOCK_SIZE   4
-#define BOARD_X      24
-#define BOARD_Y       0
-
-uint8_t tetBoard[BOARD_H][BOARD_W];
-
-// 7 tetrominoes, each has 4 blocks as {row, col} offsets
-const int8_t PIECES[7][4][2] = {
-  { {0,0},{0,1},{0,2},{0,3} },  // I
-  { {0,0},{0,1},{1,0},{1,1} },  // O
-  { {0,1},{1,0},{1,1},{1,2} },  // T
-  { {0,0},{1,0},{1,1},{1,2} },  // L
-  { {0,2},{1,0},{1,1},{1,2} },  // J
-  { {0,0},{0,1},{1,1},{1,2} },  // S
-  { {0,1},{0,2},{1,0},{1,1} },  // Z
+// ══════════════════════════════════════════
+//  CAT
+// ══════════════════════════════════════════
+static const unsigned char PROGMEM cat_frame0[] = {
+  0x01,0x80,0x06,0x00,0x00,0x00,0x01,0x80,0x06,0x00,0x00,0x00,
+  0x0F,0xE0,0x1F,0x80,0x00,0x00,0x0F,0xE0,0x1F,0x80,0x00,0x00,
+  0x0F,0xFF,0xFF,0x80,0x00,0x7C,0x0F,0xFF,0xFF,0x80,0x00,0x7C,
+  0x1F,0xFF,0xFF,0xE0,0x00,0xFF,0x1F,0xFF,0xFF,0xE0,0x01,0xFF,
+  0x3F,0xFF,0xFF,0xE0,0x00,0xFF,0x1F,0xFF,0xFF,0xE0,0x00,0xFF,
+  0x3F,0xFF,0xFF,0xE0,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0x7F,
+  0xFF,0xFF,0xFF,0xFF,0xFC,0x7F,0xFF,0xFF,0xFF,0xFF,0xFC,0x7F,
+  0xFF,0xFF,0xFD,0xFF,0xFC,0x7F,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0x1F,0xFF,0xFF,0xFF,0xFF,0xC0,0x0F,0xFF,0xFF,0xFF,0xFF,0x00,
+  0x0F,0xFF,0xFF,0xFF,0xFF,0x00,0x0F,0xFF,0xFF,0xFF,0xFF,0x00,
+  0x01,0xFF,0xFF,0xFF,0xFC,0x00,0x01,0xFF,0xFF,0xFF,0xFC,0x00,
+  0x01,0xE1,0xE0,0x78,0x7C,0x00,0x01,0xE1,0xE0,0x7C,0x7C,0x00
 };
 
-int tetPieceType;
-int tetNextType;
-int8_t tetPiece[4][2];   // current piece blocks {row, col}
-int tetPieceRow;
-int tetPieceCol;
+static const unsigned char PROGMEM cat_frame1[] = {
+  0x01,0x80,0x06,0x00,0x00,0x0C,0x01,0x80,0x06,0x00,0x00,0x1C,
+  0x0F,0xE0,0x1F,0x80,0x00,0x18,0x0F,0xE0,0x1F,0x80,0x00,0x38,
+  0x0F,0xFF,0xFF,0x80,0x00,0x30,0x0F,0xFF,0xFF,0x80,0x00,0x00,
+  0x1F,0xFF,0xFF,0xE0,0x00,0x00,0x1F,0xFF,0xFF,0xE0,0x01,0xFF,
+  0x3F,0xFF,0xFF,0xE0,0x00,0xFF,0x1F,0xFF,0xFF,0xE0,0x00,0xFF,
+  0x3F,0xFF,0xFF,0xE0,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0x7F,
+  0xFF,0xFF,0xFF,0xFF,0xFC,0x7F,0xFF,0xFF,0xFF,0xFF,0xFC,0x7F,
+  0xFF,0xFF,0xFD,0xFF,0xFC,0x7F,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xFC,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,0xFF,0xFF,0xFF,0xFF,0xFF,0xF0,
+  0x1F,0xFF,0xFF,0xFF,0xFF,0xC0,0x0F,0xFF,0xFF,0xFF,0xFF,0x00,
+  0x0F,0xFF,0xFF,0xFF,0xFF,0x00,0x0F,0xFF,0xFF,0xFF,0xFF,0x00,
+  0x01,0xFF,0xFF,0xFF,0xFC,0x00,0x01,0xFF,0xFF,0xFF,0xFC,0x00,
+  0x01,0xE1,0xE0,0x78,0x7C,0x00,0x01,0xE1,0xE0,0x7C,0x7C,0x00
+};
 
-int tetScore;
-int tetLines;
-int tetLevel;
-bool tetGameOver;
-bool tetGameStarted;
-bool tetPaused;
+unsigned long lastFrameTime = 0;
+int catFrame = 0;
 
-unsigned long lastTetFall;
-unsigned long lastTetMove;
-unsigned long lastTetDraw;
-#define TET_DRAW_INTERVAL  50
-
-int tetFallInterval() {
-  // Gets faster each level
-  return max(100, 600 - tetLevel * 60);
-}
-
-#define STATE_TETRIS  4
-
-// ─── CAT FRAMES ───
-
-void drawCatFrame0() {
-  display.fillTriangle(44, 14, 50, 26, 38, 26, SH110X_WHITE);
-  display.fillTriangle(84, 14, 90, 26, 78, 26, SH110X_WHITE);
-  display.fillTriangle(45, 17, 49, 25, 41, 25, SH110X_BLACK);
-  display.fillTriangle(83, 17, 87, 25, 79, 25, SH110X_BLACK);
-  display.fillRoundRect(36, 24, 56, 34, 10, SH110X_WHITE);
-  display.fillCircle(52, 36, 5, SH110X_BLACK);
-  display.fillCircle(76, 36, 5, SH110X_BLACK);
-  display.fillCircle(53, 35, 2, SH110X_WHITE);
-  display.fillCircle(77, 35, 2, SH110X_WHITE);
-  display.fillTriangle(63, 41, 60, 44, 66, 44, SH110X_BLACK);
-  display.drawLine(60, 44, 56, 47, SH110X_BLACK);
-  display.drawLine(66, 44, 70, 47, SH110X_BLACK);
-  display.drawLine(36, 42, 54, 44, SH110X_WHITE);
-  display.drawLine(36, 46, 54, 45, SH110X_WHITE);
-  display.drawLine(74, 44, 92, 42, SH110X_WHITE);
-  display.drawLine(74, 45, 92, 46, SH110X_WHITE);
-  display.fillRoundRect(42, 48, 44, 5, 3, SH110X_WHITE);
-  display.drawLine(86, 52, 96, 46, SH110X_WHITE);
-  display.drawLine(96, 46, 100, 40, SH110X_WHITE);
-}
-
-void drawCatFrame1() {
-  display.fillTriangle(44, 14, 50, 26, 38, 26, SH110X_WHITE);
-  display.fillTriangle(84, 14, 90, 26, 78, 26, SH110X_WHITE);
-  display.fillTriangle(45, 17, 49, 25, 41, 25, SH110X_BLACK);
-  display.fillTriangle(83, 17, 87, 25, 79, 25, SH110X_BLACK);
-  display.fillRoundRect(36, 24, 56, 34, 10, SH110X_WHITE);
-  display.drawLine(47, 36, 57, 36, SH110X_BLACK);
-  display.drawLine(71, 36, 81, 36, SH110X_BLACK);
-  display.drawLine(47, 36, 52, 39, SH110X_BLACK);
-  display.drawLine(57, 36, 52, 39, SH110X_BLACK);
-  display.drawLine(71, 36, 76, 39, SH110X_BLACK);
-  display.drawLine(81, 36, 76, 39, SH110X_BLACK);
-  display.fillTriangle(63, 41, 60, 44, 66, 44, SH110X_BLACK);
-  display.drawLine(60, 44, 56, 47, SH110X_BLACK);
-  display.drawLine(66, 44, 70, 47, SH110X_BLACK);
-  display.drawLine(36, 42, 54, 44, SH110X_WHITE);
-  display.drawLine(36, 46, 54, 45, SH110X_WHITE);
-  display.drawLine(74, 44, 92, 42, SH110X_WHITE);
-  display.drawLine(74, 45, 92, 46, SH110X_WHITE);
-  display.fillRoundRect(42, 48, 44, 5, 3, SH110X_WHITE);
-  display.drawLine(86, 52, 98, 50, SH110X_WHITE);
-  display.drawLine(98, 50, 104, 44, SH110X_WHITE);
+void drawCatFace() {
+  display.fillRect(50,17,5,4,SH110X_BLACK);
+  display.fillRect(62,17,5,4,SH110X_BLACK);
+  display.drawPixel(52,18,SH110X_WHITE);
+  display.drawPixel(64,18,SH110X_WHITE);
+  display.fillRect(55,23,3,2,SH110X_BLACK);
+  display.drawLine(55,25,53,27,SH110X_BLACK);
+  display.drawLine(57,25,59,27,SH110X_BLACK);
+  display.drawPixel(48,24,SH110X_BLACK); display.drawPixel(49,24,SH110X_BLACK);
+  display.drawPixel(63,24,SH110X_BLACK); display.drawPixel(64,24,SH110X_BLACK);
+  display.drawLine(51,9,51,13,SH110X_BLACK);
+  display.drawLine(55,8,55,12,SH110X_BLACK);
+  display.drawLine(59,9,59,13,SH110X_BLACK);
+  display.drawLine(40,22,52,24,SH110X_BLACK);
+  display.drawLine(40,25,52,25,SH110X_BLACK);
+  display.drawLine(60,24,72,22,SH110X_BLACK);
+  display.drawLine(60,25,72,25,SH110X_BLACK);
 }
 
 void showCat() {
   display.clearDisplay();
-  if (catFrame == 0) drawCatFrame0();
-  else drawCatFrame1();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(50, 5);
-  display.print("Hello");
+  display.drawBitmap(40,4, catFrame==0 ? cat_frame0 : cat_frame1, 48,38,SH110X_WHITE);
+  drawCatFace();
+  if (catFrame==1) {
+    display.fillRect(50,17,5,2,SH110X_WHITE);
+    display.fillRect(62,17,5,2,SH110X_WHITE);
+  }
+  display.setTextSize(1); display.setTextColor(SH110X_WHITE);
+  display.setCursor(28,57); display.print(F("Press SELECT"));
   display.display();
 }
 
+// ══════════════════════════════════════════
+//  MENU
+// ══════════════════════════════════════════
 void showMenu() {
   display.clearDisplay();
-  display.fillRect(0, 0, 128, 14, SH110X_WHITE);
-  display.setTextColor(SH110X_BLACK);
-  display.setTextSize(1);
-  display.setCursor(38, 3);
-  display.print("MAIN MENU");
-
-  for (int i = 0; i < menuCount; i++) {
-    int y = 20 + (i * 16);
-    if (i == selectedIndex) {
-      display.fillRoundRect(10, y - 2, 108, 14, 3, SH110X_WHITE);
-      display.setTextColor(SH110X_BLACK);
-      display.setCursor(18, y);
-      display.print("> ");
-      display.print(menuItems[i]);
-    } else {
-      display.setTextColor(SH110X_WHITE);
-      display.setCursor(18, y);
-      display.print("  ");
-      display.print(menuItems[i]);
-    }
+  display.fillRect(0,0,128,12,SH110X_WHITE);
+  display.setTextColor(SH110X_BLACK); display.setTextSize(1);
+  display.setCursor(34,2); display.print(F("MAIN MENU"));
+  const char* const labels[] PROGMEM = {"Game1","Game2","Game3","Game4","Game5","Home"};
+  for (int i=0;i<menuCount;i++) {
+    int y=14+(i*9);
+    if (i==selectedIndex) { display.fillRect(8,y-1,112,9,SH110X_WHITE); display.setTextColor(SH110X_BLACK); }
+    else display.setTextColor(SH110X_WHITE);
+    display.setCursor(14,y);
+    display.print(i==selectedIndex ? F("> ") : F("  "));
+    display.print(labels[i]);
   }
   display.display();
 }
 
-// ─── DINO DRAW ───
+// ══════════════════════════════════════════
+//  GAME 1 — DINO
+// ══════════════════════════════════════════
+#define GROUND_Y 54
+#define DINO_X   16
+#define DINO_W   12
+#define DINO_H   14
 
-void drawDino(int y, bool legToggle) {
-  // Body
-  display.fillRect(DINO_X,     y,      DINO_W,   DINO_H - 4, SH110X_WHITE);
-  // Head bump
-  display.fillRect(DINO_X + 4, y - 4,  8,        6,          SH110X_WHITE);
-  // Eye
-  display.fillRect(DINO_X + 9, y - 3,  2,        2,          SH110X_BLACK);
-  // Tail
-  display.fillRect(DINO_X - 3, y + 2,  4,        4,          SH110X_WHITE);
-  // Legs (alternating)
-  if (legToggle) {
-    display.fillRect(DINO_X + 2, y + DINO_H - 4, 3, 4, SH110X_WHITE);
-    display.fillRect(DINO_X + 7, y + DINO_H - 6, 3, 2, SH110X_WHITE);
-  } else {
-    display.fillRect(DINO_X + 2, y + DINO_H - 6, 3, 2, SH110X_WHITE);
-    display.fillRect(DINO_X + 7, y + DINO_H - 4, 3, 4, SH110X_WHITE);
-  }
+int  dinoY, dinoVY;
+int  cactusX[2], cactusH[2], cactusW[2];
+int  dinoScore, dinoSpeed;
+bool dinoOnGround, dinoLegToggle, dinoOver, dinoStarted;
+unsigned long lastDinoTick, lastLegToggle;
+
+void drawDino(int y, bool leg) {
+  display.fillRect(DINO_X,   y,      DINO_W,  DINO_H-4,SH110X_WHITE);
+  display.fillRect(DINO_X+4, y-4,    8,       6,       SH110X_WHITE);
+  display.fillRect(DINO_X+9, y-3,    2,       2,       SH110X_BLACK);
+  display.fillRect(DINO_X-3, y+2,    4,       4,       SH110X_WHITE);
+  if (leg) { display.fillRect(DINO_X+2,y+DINO_H-4,3,4,SH110X_WHITE); display.fillRect(DINO_X+7,y+DINO_H-6,3,2,SH110X_WHITE); }
+  else      { display.fillRect(DINO_X+2,y+DINO_H-6,3,2,SH110X_WHITE); display.fillRect(DINO_X+7,y+DINO_H-4,3,4,SH110X_WHITE); }
 }
 
-void drawCactus(int x, int h, int w) {
-  // Main stem
-  display.fillRect(x + w / 2 - 2, GROUND_Y - h, 4, h, SH110X_WHITE);
-  // Left arm
-  display.fillRect(x,              GROUND_Y - h + 6, w / 2 - 1, 3, SH110X_WHITE);
-  display.fillRect(x,              GROUND_Y - h + 2, 3,          6, SH110X_WHITE);
-  // Right arm
-  display.fillRect(x + w / 2 + 2,  GROUND_Y - h + 6, w / 2 - 1, 3, SH110X_WHITE);
-  display.fillRect(x + w - 3,       GROUND_Y - h + 2, 3,          6, SH110X_WHITE);
+void drawCactus(int x,int h,int w) {
+  display.fillRect(x+w/2-2,GROUND_Y-h,4,h,SH110X_WHITE);
+  display.fillRect(x,GROUND_Y-h+6,w/2-1,3,SH110X_WHITE);
+  display.fillRect(x,GROUND_Y-h+2,3,6,SH110X_WHITE);
+  display.fillRect(x+w/2+2,GROUND_Y-h+6,w/2-1,3,SH110X_WHITE);
+  display.fillRect(x+w-3,GROUND_Y-h+2,3,6,SH110X_WHITE);
 }
 
-void initGame() {
-  dinoY        = GROUND_Y - DINO_H;
-  dinoVY       = 0;
-  dinoOnGround = true;
-  dinoLegToggle = false;
-  gameScore    = 0;
-  gameSpeed    = 2;
-  gameOver     = false;
-  gameStarted  = false;
-  lastGameTick = millis();
-  lastLegToggle = millis();
+void resetCactus(int i) { cactusX[i]=128+random(30,80); cactusH[i]=random(12,20); cactusW[i]=random(8,14); }
+bool dinoHit(int i) { return (DINO_X+DINO_W-2>cactusX[i]+1)&&(DINO_X+2<cactusX[i]+cactusW[i]-1)&&(dinoY+DINO_H-2>GROUND_Y-cactusH[i])&&(dinoY<GROUND_Y); }
 
-  // First cactus starts off screen right
-  cactusX[0] = 140;
-  cactusH[0] = 14;
-  cactusW[0] = 10;
-
-  // Second cactus further behind
-  cactusX[1] = 220;
-  cactusH[1] = 18;
-  cactusW[1] = 12;
+void initDino() {
+  dinoY=GROUND_Y-DINO_H; dinoVY=0; dinoOnGround=true; dinoLegToggle=false;
+  dinoScore=0; dinoSpeed=2; dinoOver=false; dinoStarted=false;
+  lastDinoTick=millis(); lastLegToggle=millis();
+  cactusX[0]=140;cactusH[0]=14;cactusW[0]=10;
+  cactusX[1]=220;cactusH[1]=18;cactusW[1]=12;
 }
 
-void resetCactus(int i) {
-  cactusX[i] = 128 + random(30, 80);
-  cactusH[i] = random(12, 20);
-  cactusW[i] = random(8, 14);
-}
-
-bool checkCollision(int i) {
-  int dLeft  = DINO_X;
-  int dRight = DINO_X + DINO_W - 1;
-  int dTop   = dinoY;
-  int dBot   = dinoY + DINO_H - 1;
-
-  int cLeft  = cactusX[i];
-  int cRight = cactusX[i] + cactusW[i] - 1;
-  int cTop   = GROUND_Y - cactusH[i];
-  int cBot   = GROUND_Y;
-
-  // Shrink hitbox slightly for fairness
-  return (dRight - 2 > cLeft + 1) &&
-         (dLeft  + 2 < cRight - 1) &&
-         (dBot   - 2 > cTop) &&
-         (dTop       < cBot);
-}
-
-void showGameOver() {
+void showDinoStart() {
   display.clearDisplay();
-  // Ground line
-  display.drawLine(0, GROUND_Y, 128, GROUND_Y, SH110X_WHITE);
-  display.setTextColor(SH110X_WHITE);
-  display.setTextSize(1);
-  display.setCursor(22, 10);
-  display.print("GAME  OVER");
-  display.setCursor(14, 26);
-  display.print("Score: ");
-  display.print(gameScore);
-  display.setCursor(8, 40);
-  display.print("SELECT = restart");
+  display.drawLine(0,GROUND_Y,128,GROUND_Y,SH110X_WHITE);
+  drawDino(dinoY,false);
+  display.setTextColor(SH110X_WHITE);display.setTextSize(1);
+  display.setCursor(34,10);display.print(F("DINO GAME"));
+  display.setCursor(10,26);display.print(F("UP/SEL = jump"));
+  display.setCursor(10,40);display.print(F("Press SELECT"));
   display.display();
 }
 
-void showGameStart() {
+void showDinoOver() {
   display.clearDisplay();
-  display.drawLine(0, GROUND_Y, 128, GROUND_Y, SH110X_WHITE);
-  drawDino(dinoY, false);
-  display.setTextColor(SH110X_WHITE);
-  display.setTextSize(1);
-  display.setCursor(34, 10);
-  display.print("DINO GAME");
-  display.setCursor(10, 26);
-  display.print("SELECT/UP = jump");
-  display.setCursor(10, 38);
-  display.print("Press SELECT");
-  display.setCursor(10, 48);
-  display.print("to start!");
+  display.setTextColor(SH110X_WHITE);display.setTextSize(1);
+  display.setCursor(22,10);display.print(F("GAME OVER"));
+  display.setCursor(14,26);display.print(F("Score:"));display.print(dinoScore);
+  display.setCursor(8,42);display.print(F("SEL=restart WAKE=menu"));
   display.display();
 }
 
-void runGame() {
-  if (millis() - lastGameTick < GAME_TICK) return;
-  lastGameTick = millis();
-
-  // Jump input (UP or SELECT)
-  if ((buttonDown(BTN_UP) || buttonDown(BTN_SELECT)) && dinoOnGround) {
-    dinoVY = JUMP_FORCE;
-    dinoOnGround = false;
-    lastDebounce = millis();
+void runDino() {
+  if (millis()-lastDinoTick<40) return;
+  lastDinoTick=millis();
+  if ((buttonDown(BTN_UP)||buttonDown(BTN_SELECT))&&dinoOnGround){dinoVY=-10;dinoOnGround=false;lastDebounce=millis();}
+  dinoVY++;dinoY+=dinoVY;
+  if (dinoY>=GROUND_Y-DINO_H){dinoY=GROUND_Y-DINO_H;dinoVY=0;dinoOnGround=true;}
+  for (int i=0;i<2;i++){
+    cactusX[i]-=dinoSpeed;
+    if (cactusX[i]+cactusW[i]<0){resetCactus(i);dinoScore++;if(dinoScore%5==0&&dinoSpeed<6)dinoSpeed++;}
+    if (dinoHit(i)){dinoOver=true;showDinoOver();return;}
   }
-
-  // Physics
-  dinoY += dinoVY;
-
-  if (!dinoOnGround) {
-  dinoVY += GRAVITY;
-  }
-
-  if (dinoY >= GROUND_Y - DINO_H) {
-    dinoY        = GROUND_Y - DINO_H;
-    dinoVY       = 0;
-    dinoOnGround = true;
-  }
-
-  // Move cactuses
-  for (int i = 0; i < 2; i++) {
-    cactusX[i] -= gameSpeed;
-    if (cactusX[i] + cactusW[i] < 0) {
-      resetCactus(i);
-      gameScore++;
-      // Speed up every 5 points
-      if (gameScore % 5 == 0 && gameSpeed < 6) gameSpeed++;
-    }
-    if (checkCollision(i)) {
-      gameOver = true;
-      showGameOver();
-      return;
-    }
-  }
-
-  // Leg animation
-  if (dinoOnGround && millis() - lastLegToggle > LEG_TOGGLE_DELAY) {
-    dinoLegToggle = !dinoLegToggle;
-    lastLegToggle = millis();
-  }
-
-  // Draw frame
+  if (dinoOnGround&&millis()-lastLegToggle>120){dinoLegToggle=!dinoLegToggle;lastLegToggle=millis();}
   display.clearDisplay();
-  display.drawLine(0, GROUND_Y, 128, GROUND_Y, SH110X_WHITE);
-
-  // Score top right
-  display.setTextColor(SH110X_WHITE);
-  display.setTextSize(1);
-  display.setCursor(80, 2);
-  display.print("SC:");
-  display.print(gameScore);
-
-  drawDino(dinoY, dinoOnGround ? dinoLegToggle : false);
-
-  for (int i = 0; i < 2; i++) {
-    if (cactusX[i] < 128) {
-      drawCactus(cactusX[i], cactusH[i], cactusW[i]);
-    }
-  }
-
+  display.drawLine(0,GROUND_Y,128,GROUND_Y,SH110X_WHITE);
+  display.setTextColor(SH110X_WHITE);display.setTextSize(1);
+  display.setCursor(80,2);display.print(F("SC:"));display.print(dinoScore);
+  drawDino(dinoY,dinoOnGround?dinoLegToggle:false);
+  for (int i=0;i<2;i++) if(cactusX[i]<128) drawCactus(cactusX[i],cactusH[i],cactusW[i]);
   display.display();
 }
-//anywhere before go to option
-void showTimer() {
+
+// ══════════════════════════════════════════
+//  GAME 2 — TETRIS
+// ══════════════════════════════════════════
+#define TET_W 8
+#define TET_H 14
+#define TET_BLK 4
+#define TET_BX 32
+#define TET_BY 2
+
+uint8_t tetBoard[TET_H];
+const int8_t PIECES[7][4][2] PROGMEM = {
+  {{0,0},{0,1},{0,2},{0,3}},{{0,0},{0,1},{1,0},{1,1}},
+  {{0,1},{1,0},{1,1},{1,2}},{{0,0},{1,0},{1,1},{1,2}},
+  {{0,2},{1,0},{1,1},{1,2}},{{0,0},{0,1},{1,1},{1,2}},
+  {{0,1},{0,2},{1,0},{1,1}},
+};
+int8_t tetPiece[4][2];
+int tetPR,tetPC,tetNextType,tetScore,tetLines,tetLevel;
+bool tetOver,tetStarted;
+unsigned long lastTetFall,lastTetInput;
+
+bool tetGet(int r,int c){if(c<0||c>=TET_W||r>=TET_H)return true;if(r<0)return false;return(tetBoard[r]>>(7-c))&1;}
+void tetSet(int r,int c){if(r>=0&&r<TET_H&&c>=0&&c<TET_W)tetBoard[r]|=(1<<(7-c));}
+bool tetValid(int8_t b[4][2],int pr,int pc){for(int i=0;i<4;i++){if(tetGet(b[i][0]+pr,b[i][1]+pc))return false;}return true;}
+void tetSpawn(int t){tetPR=0;tetPC=2;for(int i=0;i<4;i++){tetPiece[i][0]=(int8_t)pgm_read_byte(&PIECES[t][i][0]);tetPiece[i][1]=(int8_t)pgm_read_byte(&PIECES[t][i][1]);}}
+void tetRotate(){int8_t r[4][2];int8_t n=127,x=127,m=-128,y=-128;for(int i=0;i<4;i++){n=min(n,tetPiece[i][0]);x=min(x,tetPiece[i][1]);m=max(m,tetPiece[i][0]);y=max(y,tetPiece[i][1]);}int s=max(m-n,y-x)+1;for(int i=0;i<4;i++){r[i][0]=tetPiece[i][1]-x;r[i][1]=s-1-(tetPiece[i][0]-n);}if(tetValid(r,tetPR,tetPC))memcpy(tetPiece,r,sizeof(tetPiece));}
+void tetLock(){for(int i=0;i<4;i++)tetSet(tetPiece[i][0]+tetPR,tetPiece[i][1]+tetPC);int cl=0;for(int r=TET_H-1;r>=0;r--){if(tetBoard[r]==0xFF){cl++;for(int rr=r;rr>0;rr--)tetBoard[rr]=tetBoard[rr-1];tetBoard[0]=0;r++;}}if(cl){int p[]={0,40,100,300,1200};tetScore+=p[cl]*(tetLevel+1);tetLines+=cl;tetLevel=tetLines/10;}tetSpawn(tetNextType);tetNextType=random(7);if(!tetValid(tetPiece,tetPR,tetPC))tetOver=true;lastTetFall=millis();}
+
+void drawTetris(){
   display.clearDisplay();
-
-  // Title bar
-  display.fillRect(0, 0, 128, 14, SH110X_WHITE);
-  display.setTextColor(SH110X_BLACK);
-  display.setTextSize(1);
-  display.setCursor(44, 3);
-  display.print("TIMER");
-
-  if (timerDone) {
-    // Flashing DONE screen
-    display.setTextColor(SH110X_WHITE);
-    display.setTextSize(2);
-    display.setCursor(30, 22);
-    display.print("DONE!");
-    display.setTextSize(1);
-    display.setCursor(10, 46);
-    display.print("SELECT = restart");
-    display.setCursor(10, 56);
-    display.print("WAKE   = menu");
-  } else {
-    // Big countdown digits
-    int mins = timerSecondsLeft / 60;
-    int secs = timerSecondsLeft % 60;
-    display.setTextColor(SH110X_WHITE);
-    display.setTextSize(3);
-    display.setCursor(18, 18);
-    if (mins < 10) display.print("0");
-    display.print(mins);
-    display.print(":");
-    if (secs < 10) display.print("0");
-    display.print(secs);
-
-    // Status bar at bottom
-    display.setTextSize(1);
-    display.setCursor(0, 54);
-    if (timerPaused) {
-      display.print("UP=+1m SEL=resume");
-    } else {
-      display.print("UP=+1m SEL=pause ");
-    }
-  }
-
+  display.drawRect(TET_BX-1,TET_BY,TET_W*TET_BLK+2,TET_H*TET_BLK+1,SH110X_WHITE);
+  for(int r=0;r<TET_H;r++)for(int c=0;c<TET_W;c++)if((tetBoard[r]>>(7-c))&1)display.fillRect(TET_BX+c*TET_BLK,TET_BY+r*TET_BLK,TET_BLK-1,TET_BLK-1,SH110X_WHITE);
+  for(int i=0;i<4;i++){int r=tetPiece[i][0]+tetPR,c=tetPiece[i][1]+tetPC;if(r>=0)display.fillRect(TET_BX+c*TET_BLK,TET_BY+r*TET_BLK,TET_BLK-1,TET_BLK-1,SH110X_WHITE);}
+  display.setTextColor(SH110X_WHITE);display.setTextSize(1);
+  display.setCursor(2,4);display.print(F("SC"));display.setCursor(2,14);display.print(tetScore);
+  display.setCursor(2,30);display.print(F("LV"));display.setCursor(2,40);display.print(tetLevel);
   display.display();
 }
 
-void initTimer() {
-  timerSecondsLeft  = timerTotalSeconds;
-  timerRunning      = false;
-  timerPaused       = false;
-  timerDone         = false;
-  timerStartMillis  = millis();
+void showTetStart(){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(34,2);display.print(F("TETRIS"));display.setCursor(4,16);display.print(F("UP=rotate"));display.setCursor(4,28);display.print(F("DWN=left SEL=right"));display.setCursor(4,44);display.print(F("Press UP to start"));display.display();}
+void showTetOver(){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(22,10);display.print(F("GAME OVER"));display.setCursor(14,26);display.print(F("Score:"));display.print(tetScore);display.setCursor(4,44);display.print(F("UP=retry WAKE=menu"));display.display();}
+
+void initTetris(){memset(tetBoard,0,sizeof(tetBoard));tetScore=0;tetLines=0;tetLevel=0;tetOver=false;tetStarted=false;tetNextType=random(7);tetSpawn(random(7));lastTetFall=millis();lastTetInput=millis();}
+int tetSpd(){return max(150,600-tetLevel*60);}
+void runTetris(){unsigned long n=millis();if(n-lastTetInput>160){bool m=false;if(buttonDown(BTN_DOWN)){if(tetValid(tetPiece,tetPR,tetPC-1))tetPC--;m=true;}else if(buttonDown(BTN_SELECT)){if(tetValid(tetPiece,tetPR,tetPC+1))tetPC++;m=true;}else if(buttonDown(BTN_UP)){tetRotate();m=true;}if(m){lastTetInput=n;drawTetris();return;}}if(n-lastTetFall>(unsigned long)tetSpd()){if(tetValid(tetPiece,tetPR+1,tetPC))tetPR++;else{tetLock();if(tetOver){showTetOver();return;}}lastTetFall=n;drawTetris();}}
+
+// ══════════════════════════════════════════
+//  GAME 3 — FLAPPY BIRD
+// ══════════════════════════════════════════
+#define BIRD_X   20
+#define BIRD_R    4
+#define PIPE_W    8
+#define PIPE_GAP 28
+
+int  birdY,birdVY;
+int  pipeX[2],pipeGapY[2];
+int  flappyScore;
+bool flappyOver,flappyStarted;
+unsigned long lastFlappyTick;
+
+void initFlappy(){birdY=32;birdVY=0;pipeX[0]=110;pipeGapY[0]=8+random(14);pipeX[1]=174;pipeGapY[1]=8+random(14);flappyScore=0;flappyOver=false;flappyStarted=false;lastFlappyTick=millis();}
+
+void drawPipe(int x,int g){if(x<-PIPE_W||x>128)return;display.fillRect(x,0,PIPE_W,g,SH110X_WHITE);display.fillRect(x,g+PIPE_GAP,PIPE_W,64-(g+PIPE_GAP),SH110X_WHITE);display.fillRect(x-1,g-3,PIPE_W+2,4,SH110X_WHITE);display.fillRect(x-1,g+PIPE_GAP-1,PIPE_W+2,4,SH110X_WHITE);}
+bool flappyHit(int i){return(BIRD_X+BIRD_R>pipeX[i])&&(BIRD_X-BIRD_R<pipeX[i]+PIPE_W)&&(birdY-BIRD_R<pipeGapY[i]||birdY+BIRD_R>pipeGapY[i]+PIPE_GAP);}
+
+void showFlappyStart(){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(22,8);display.print(F("FLAPPY BIRD"));display.fillCircle(BIRD_X,32,BIRD_R,SH110X_WHITE);display.setCursor(6,26);display.print(F("SEL/UP = flap"));display.setCursor(6,40);display.print(F("Press SELECT"));display.display();}
+void showFlappyOver(){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(22,10);display.print(F("GAME OVER"));display.setCursor(14,26);display.print(F("Score:"));display.print(flappyScore);display.setCursor(8,42);display.print(F("SEL=restart WAKE=menu"));display.display();}
+
+void runFlappy(){
+  if(millis()-lastFlappyTick<35)return;lastFlappyTick=millis();
+  if(buttonDown(BTN_SELECT)||buttonDown(BTN_UP)){birdVY=-3;lastDebounce=millis();}
+  birdVY++;birdY+=birdVY;
+  if(birdY-BIRD_R<=0)birdY=BIRD_R;
+  if(birdY+BIRD_R>=63){flappyOver=true;showFlappyOver();return;}
+  for(int i=0;i<2;i++){pipeX[i]-=2;if(pipeX[i]+PIPE_W<0){pipeX[i]=128+random(10,30);pipeGapY[i]=8+random(14);flappyScore++;}if(flappyHit(i)){flappyOver=true;showFlappyOver();return;}}
+  display.clearDisplay();for(int i=0;i<2;i++)drawPipe(pipeX[i],pipeGapY[i]);
+  display.fillCircle(BIRD_X,birdY,BIRD_R,SH110X_WHITE);
+  display.drawPixel(BIRD_X+2,birdY-1,SH110X_BLACK);
+  display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(0,0);display.print(flappyScore);
+  display.display();
 }
 
-void goToOption(int index) {
-  switch (index) {
-    case 0:
-      currentState = STATE_GAME;
-      initGame();
-      gameStarted = true;
-    break;
-    case 1:
-      currentState = STATE_TIMER;
-      initTimer();
-      timerRunning = true;
-      showTimer();
-      break;
-    case 2:
-      currentState = STATE_CAT;
-      catFrame = 0;
-      lastFrameTime = millis();
-      showCat();
-      break;
-  }
-}
+// ══════════════════════════════════════════
+//  GAME 4 — SNAKE  (reduced to 24 max)
+// ══════════════════════════════════════════
+#define SNAKE_W   21
+#define SNAKE_H   13
+#define SNAKE_BLK  4
+#define SNAKE_OX  18
+#define SNAKE_OY   4
+#define SNAKE_MAX 24   // was 60 — saves 144 bytes
 
-void setup() {
-  pinMode(BTN_WAKE,   INPUT_PULLUP);
-  pinMode(BTN_UP,     INPUT_PULLUP);
-  pinMode(BTN_DOWN,   INPUT_PULLUP);
-  pinMode(BTN_SELECT, INPUT_PULLUP);
+int8_t snakeX[SNAKE_MAX], snakeY[SNAKE_MAX];  // int8_t not int — saves 48 bytes
+int  snakeLen,snakeDirX,snakeDirY,foodX,foodY,snakeScore;
+bool snakeOver,snakeStarted;
+unsigned long lastSnakeTick;
 
-  display.begin(0x3C, true);
+void placeFood(){bool ok=false;while(!ok){foodX=random(SNAKE_W);foodY=random(SNAKE_H);ok=true;for(int i=0;i<snakeLen;i++)if(snakeX[i]==foodX&&snakeY[i]==foodY){ok=false;break;}}}
+void initSnake(){snakeLen=3;snakeX[0]=10;snakeY[0]=6;snakeX[1]=9;snakeY[1]=6;snakeX[2]=8;snakeY[2]=6;snakeDirX=1;snakeDirY=0;snakeScore=0;snakeOver=false;snakeStarted=false;placeFood();lastSnakeTick=millis();}
 
+void showSnakeStart(){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(38,2);display.print(F("SNAKE"));display.setCursor(4,16);display.print(F("UP=up  DOWN=down"));display.setCursor(4,28);display.print(F("SEL=right"));display.setCursor(4,40);display.print(F("WAKE=left (in-game)"));display.setCursor(4,54);display.print(F("Press UP to start"));display.display();}
+void showSnakeOver(){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(22,10);display.print(F("GAME OVER"));display.setCursor(14,26);display.print(F("Score:"));display.print(snakeScore);display.setCursor(8,42);display.print(F("UP=retry WAKE=menu"));display.display();}
+
+void drawSnake(){
   display.clearDisplay();
+  display.drawRect(SNAKE_OX-1,SNAKE_OY-1,SNAKE_W*SNAKE_BLK+2,SNAKE_H*SNAKE_BLK+2,SH110X_WHITE);
+  for(int i=0;i<snakeLen;i++)display.fillRect(SNAKE_OX+snakeX[i]*SNAKE_BLK,SNAKE_OY+snakeY[i]*SNAKE_BLK,SNAKE_BLK-1,SNAKE_BLK-1,SH110X_WHITE);
+  display.fillRect(SNAKE_OX+foodX*SNAKE_BLK+1,SNAKE_OY+foodY*SNAKE_BLK+1,SNAKE_BLK-3,SNAKE_BLK-3,SH110X_WHITE);
+  display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(0,0);display.print(F("S:"));display.print(snakeScore);
   display.display();
-
-  currentState = STATE_CAT;
-  showCat();
 }
 
-void loop() {
+void runSnake(){
+  // direction — WAKE used as left only during gameplay
+  if(buttonDown(BTN_UP)&&snakeDirY!=1){snakeDirX=0;snakeDirY=-1;}
+  else if(buttonDown(BTN_DOWN)&&snakeDirY!=-1){snakeDirX=0;snakeDirY=1;}
+  else if(buttonDown(BTN_SELECT)&&snakeDirX!=-1){snakeDirX=1;snakeDirY=0;}
+  else if(buttonDown(BTN_WAKE)&&snakeDirX!=1){snakeDirX=-1;snakeDirY=0;lastDebounce=millis();}
+  if(millis()-lastSnakeTick<200)return;lastSnakeTick=millis();
+  int nx=snakeX[0]+snakeDirX,ny=snakeY[0]+snakeDirY;
+  if(nx<0||nx>=SNAKE_W||ny<0||ny>=SNAKE_H){snakeOver=true;showSnakeOver();return;}
+  for(int i=0;i<snakeLen-1;i++)if(snakeX[i]==nx&&snakeY[i]==ny){snakeOver=true;showSnakeOver();return;}
+  bool ate=(nx==foodX&&ny==foodY);
+  for(int i=min(snakeLen-1+(ate?1:0),SNAKE_MAX-1);i>0;i--){snakeX[i]=snakeX[i-1];snakeY[i]=snakeY[i-1];}
+  snakeX[0]=nx;snakeY[0]=ny;
+  if(ate){if(snakeLen<SNAKE_MAX)snakeLen++;snakeScore++;placeFood();}
+  drawSnake();
+}
 
-  if (!screenOn && buttonPressed(BTN_WAKE)) {
-    screenOn = true;
-    currentState = STATE_CAT;
-    catFrame = 0;
-    lastFrameTime = millis();
-    showCat();
+// ══════════════════════════════════════════
+//  GAME 5 — BREAKOUT
+// ══════════════════════════════════════════
+#define BRK_ROWS 4
+#define BRK_COLS 8
+#define BRK_BW   14
+#define BRK_BH    4
+#define BRK_PW   24
+
+int  padX,ballX,ballY,ballVX,ballVY,brkScore,brkLives;
+bool bricks[BRK_ROWS][BRK_COLS];
+bool brkOver,brkWon,brkStarted;
+unsigned long lastBrkTick;
+
+void initBreakout(){padX=52;ballX=64;ballY=50;ballVX=2;ballVY=-2;for(int r=0;r<BRK_ROWS;r++)for(int c=0;c<BRK_COLS;c++)bricks[r][c]=true;brkScore=0;brkLives=3;brkOver=false;brkWon=false;brkStarted=false;lastBrkTick=millis();}
+
+void showBrkStart(){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(26,8);display.print(F("BREAKOUT"));display.setCursor(4,22);display.print(F("DOWN   = paddle left"));display.setCursor(4,34);display.print(F("SELECT = paddle right"));display.setCursor(4,48);display.print(F("Press SELECT to start"));display.display();}
+void showBrkEnd(bool w){display.clearDisplay();display.setTextColor(SH110X_WHITE);display.setTextSize(1);display.setCursor(w?26:22,10);display.print(w?F("YOU WIN!"):F("GAME OVER"));display.setCursor(14,28);display.print(F("Score:"));display.print(brkScore);display.setCursor(8,44);display.print(F("SEL=restart WAKE=menu"));display.display();}
+
+void drawBreakout(){
+  display.clearDisplay();
+  for(int r=0;r<BRK_ROWS;r++)for(int c=0;c<BRK_COLS;c++)if(bricks[r][c])display.fillRect(c*BRK_BW,2+r*(BRK_BH+2),BRK_BW-1,BRK_BH,SH110X_WHITE);
+  display.fillRect(padX,61,BRK_PW,3,SH110X_WHITE);
+  display.fillCircle(ballX,ballY,3,SH110X_WHITE);
+  display.setTextColor(SH110X_WHITE);display.setTextSize(1);
+  display.setCursor(0,56);display.print(F("L:"));display.print(brkLives);
+  display.setCursor(90,56);display.print(F("S:"));display.print(brkScore);
+  display.display();
+}
+
+void runBreakout(){
+  if(millis()-lastBrkTick<30)return;lastBrkTick=millis();
+  if(buttonDown(BTN_DOWN)&&padX>0)padX-=4;
+  if(buttonDown(BTN_SELECT)&&padX<128-BRK_PW)padX+=4;
+  ballX+=ballVX;ballY+=ballVY;
+  if(ballX<=3){ballX=3;ballVX=abs(ballVX);}
+  if(ballX>=124){ballX=124;ballVX=-abs(ballVX);}
+  if(ballY<=3){ballY=3;ballVY=abs(ballVY);}
+  if(ballY>=61&&ballX>=padX&&ballX<=padX+BRK_PW){ballVY=-abs(ballVY);int off=ballX-(padX+BRK_PW/2);ballVX=off/(BRK_PW/4);if(ballVX==0)ballVX=1;}
+  if(ballY>66){brkLives--;if(brkLives<=0){brkOver=true;showBrkEnd(false);return;}ballX=padX+BRK_PW/2;ballY=50;ballVX=2;ballVY=-2;}
+  int bc=ballX/BRK_BW,br=(ballY-2)/(BRK_BH+2);
+  if(br>=0&&br<BRK_ROWS&&bc>=0&&bc<BRK_COLS&&bricks[br][bc]){bricks[br][bc]=false;ballVY=-ballVY;brkScore++;bool any=false;for(int r=0;r<BRK_ROWS;r++)for(int c=0;c<BRK_COLS;c++)if(bricks[r][c]){any=true;break;}if(!any){brkWon=true;showBrkEnd(true);return;}}
+  drawBreakout();
+}
+
+// ══════════════════════════════════════════
+//  goToOption
+// ══════════════════════════════════════════
+void goToOption(int i){
+  switch(i){
+    case 0:currentState=STATE_DINO;    initDino();     showDinoStart();   break;
+    case 1:currentState=STATE_TETRIS;  initTetris();   showTetStart();    break;
+    case 2:currentState=STATE_FLAPPY;  initFlappy();   showFlappyStart(); break;
+    case 3:currentState=STATE_SNAKE;   initSnake();    showSnakeStart();  break;
+    case 4:currentState=STATE_BREAKOUT;initBreakout(); showBrkStart();    break;
+    case 5:currentState=STATE_CAT;catFrame=0;lastFrameTime=millis();showCat();break;
+  }
+}
+
+// ══════════════════════════════════════════
+//  SETUP & LOOP
+// ══════════════════════════════════════════
+void setup(){
+  pinMode(BTN_WAKE,INPUT_PULLUP);pinMode(BTN_UP,INPUT_PULLUP);
+  pinMode(BTN_DOWN,INPUT_PULLUP);pinMode(BTN_SELECT,INPUT_PULLUP);
+  randomSeed(analogRead(0));
+  display.begin(0x3C,true);
+  display.clearDisplay();display.display();
+}
+
+void loop(){
+  if(!screenOn&&buttonPressed(BTN_WAKE)){screenOn=true;currentState=STATE_CAT;catFrame=0;lastFrameTime=millis();showCat();}
+  if(!screenOn)return;
+
+  if(currentState==STATE_CAT){
+    if(millis()-lastFrameTime>300){catFrame=1-catFrame;lastFrameTime=millis();showCat();}
+    if(buttonPressed(BTN_SELECT)){currentState=STATE_MENU;selectedIndex=0;showMenu();}
+    if(buttonPressed(BTN_WAKE)){screenOn=false;display.clearDisplay();display.display();}
   }
 
-  if (!screenOn) return;
-
-  // ── CAT STATE ──
-  if (currentState == STATE_CAT) {
-    if (millis() - lastFrameTime > FRAME_DELAY) {
-      catFrame = 1 - catFrame;
-      lastFrameTime = millis();
-      showCat();
-    }
-    if (buttonPressed(BTN_SELECT)) {
-      currentState = STATE_MENU;
-      selectedIndex = 0;
-      showMenu();
-    }
-    if (buttonPressed(BTN_WAKE)) {
-      screenOn = false;
-      display.clearDisplay();
-      display.display();
-    }
+  else if(currentState==STATE_MENU){
+    if(buttonPressed(BTN_UP)){selectedIndex=(selectedIndex-1+menuCount)%menuCount;showMenu();}
+    if(buttonPressed(BTN_DOWN)){selectedIndex=(selectedIndex+1)%menuCount;showMenu();}
+    if(buttonPressed(BTN_SELECT))goToOption(selectedIndex);
+    if(buttonPressed(BTN_WAKE)){currentState=STATE_CAT;catFrame=0;lastFrameTime=millis();showCat();}
   }
 
-  // ── MENU STATE ──
-  else if (currentState == STATE_MENU) {
-    if (buttonPressed(BTN_UP)) {
-      selectedIndex = (selectedIndex - 1 + menuCount) % menuCount;
-      showMenu();
-    }
-    if (buttonPressed(BTN_DOWN)) {
-      selectedIndex = (selectedIndex + 1) % menuCount;
-      showMenu();
-    }
-    if (buttonPressed(BTN_SELECT)) {
-      goToOption(selectedIndex);
-    }
-    if (buttonPressed(BTN_WAKE)) {
-      currentState = STATE_CAT;
-      catFrame = 0;
-      lastFrameTime = millis();
-      showCat();
-    }
+  else if(currentState==STATE_DINO){
+    if(!dinoStarted){if(buttonPressed(BTN_SELECT)){dinoStarted=true;lastDebounce=millis()+300;}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else if(dinoOver){if(buttonPressed(BTN_SELECT)){initDino();dinoStarted=true;lastDebounce=millis()+300;}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else{runDino();if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
   }
 
-  // ── GAME STATE ──
-  else if (currentState == STATE_GAME) {
-    if (!gameStarted) {
-      // Wait for SELECT to start
-      if (buttonPressed(BTN_SELECT)) {
-        gameStarted = true;
-        lastDebounce = millis() + 300;
-      }
-      if (buttonPressed(BTN_WAKE)) {
-        currentState = STATE_MENU;
-        selectedIndex = 0;
-        showMenu();
-      }
-    } else if (gameOver) {
-      if (buttonPressed(BTN_SELECT)) {
-        initGame();
-        gameStarted = true;
-        lastDebounce = millis() + 300;
-      }
-      if (buttonPressed(BTN_WAKE)) {
-        currentState = STATE_MENU;
-        selectedIndex = 0;
-        showMenu();
-      }
-    } else {
-      runGame();
-      if (buttonPressed(BTN_WAKE)) {
-        currentState = STATE_MENU;
-        selectedIndex = 0;
-        showMenu();
-      }
-    }
+  else if(currentState==STATE_TETRIS){
+    if(!tetStarted){if(buttonDown(BTN_UP)&&millis()-lastDebounce>400){lastDebounce=millis();tetStarted=true;lastTetFall=millis();lastTetInput=millis();drawTetris();}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else if(tetOver){if(buttonDown(BTN_UP)&&millis()-lastDebounce>500){lastDebounce=millis();initTetris();tetStarted=true;lastTetFall=millis();drawTetris();}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else{runTetris();if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
   }
 
-  // ── TIMER STATE ──
-  else if (currentState == STATE_TIMER) {
+  else if(currentState==STATE_FLAPPY){
+    if(!flappyStarted){if(buttonPressed(BTN_SELECT)){flappyStarted=true;lastDebounce=millis()+300;}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else if(flappyOver){if(buttonPressed(BTN_SELECT)){initFlappy();flappyStarted=true;lastDebounce=millis()+300;}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else{runFlappy();if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+  }
 
-    // Countdown tick
-    if (timerRunning && !timerPaused && !timerDone) {
-      int elapsed = (millis() - timerStartMillis) / 1000;
-      int newSecondsLeft = timerTotalSeconds - elapsed;
-      if (newSecondsLeft <= 0) {
-        timerSecondsLeft = 0;
-        timerDone = true;
-        timerRunning = false;
-        showTimer();
-      } else if (newSecondsLeft != timerSecondsLeft) {
-        timerSecondsLeft = newSecondsLeft;
-        showTimer();
-      }
-    }
+  else if(currentState==STATE_SNAKE){
+    if(!snakeStarted){if(buttonDown(BTN_UP)&&millis()-lastDebounce>400){lastDebounce=millis();snakeStarted=true;lastSnakeTick=millis();drawSnake();}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else if(snakeOver){if(buttonDown(BTN_UP)&&millis()-lastDebounce>500){lastDebounce=millis();initSnake();snakeStarted=true;lastSnakeTick=millis();drawSnake();}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else{runSnake();if(snakeDirX!=-1&&buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+  }
 
-    // SELECT — pause / resume / restart when done
-    if (buttonPressed(BTN_SELECT)) {
-      if (timerDone) {
-        initTimer();
-        timerRunning = true;
-        showTimer();
-      } else if (timerPaused) {
-        // Resume — shift start time forward by paused duration
-        timerStartMillis += millis() - timerPausedMillis;
-        timerPaused = false;
-        showTimer();
-      } else {
-        timerPausedMillis = millis();
-        timerPaused = true;
-        showTimer();
-      }
-    }
-
-    // UP — add 1 minute (works while paused or running)
-    if (buttonPressed(BTN_UP)) {
-      timerTotalSeconds += 60;
-      if (!timerPaused) {
-        // Recalculate so added time is reflected immediately
-        int elapsed = (millis() - timerStartMillis) / 1000;
-        timerSecondsLeft = timerTotalSeconds - elapsed;
-      } else {
-        timerSecondsLeft += 60;
-      }
-      showTimer();
-    }
-
-    // DOWN — subtract 1 minute (minimum 1 minute)
-    if (buttonPressed(BTN_DOWN)) {
-      if (timerTotalSeconds > 60) {
-        timerTotalSeconds -= 60;
-        if (!timerPaused) {
-          int elapsed = (millis() - timerStartMillis) / 1000;
-          timerSecondsLeft = timerTotalSeconds - elapsed;
-          if (timerSecondsLeft < 1) timerSecondsLeft = 1;
-        } else {
-          timerSecondsLeft -= 60;
-          if (timerSecondsLeft < 1) timerSecondsLeft = 1;
-        }
-        showTimer();
-      }
-    }
-
-    // WAKE — back to menu, reset timer to default
-    if (buttonPressed(BTN_WAKE)) {
-      timerTotalSeconds = 120;
-      currentState = STATE_MENU;
-      selectedIndex = 0;
-      showMenu();
-    }
+  else if(currentState==STATE_BREAKOUT){
+    if(!brkStarted){if(buttonPressed(BTN_SELECT)){brkStarted=true;lastDebounce=millis()+300;}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else if(brkOver||brkWon){if(buttonPressed(BTN_SELECT)){initBreakout();brkStarted=true;lastDebounce=millis()+300;}if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
+    else{runBreakout();if(buttonPressed(BTN_WAKE)){backToMenu();showMenu();}}
   }
 }
